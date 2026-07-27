@@ -1,6 +1,6 @@
 // ui.js —— 交互控件：轨道面板、原子选择器、参数面板、播放控制条。
 import { TRACK_NAMES } from "./timeline.js";
-import { estimateAtomDurationMs } from "./motion-sim.js";
+import { estimateAtomDurationMs, axesOfAtom } from "./motion-sim.js";
 import { exportFileName } from "./template-store.js";
 
 const TRACK_LABELS = {
@@ -331,6 +331,36 @@ export function initUI({ timeline, player, atomsIndex, atomsData, onChange }) {
   }
   el.cancelEditBtn.addEventListener("click", exitEdit);
 
+  // 重叠片段分层：按开始时间贪心地放进第一条"不与已有片段重叠"的层。
+  // 返回 Map<seg, laneIndex>；不重叠的轨道所有片段都落在第 0 层。
+  function assignLanes(segs) {
+    const lanes = new Map();
+    const laneEnds = [];   // 每层当前的结束时间
+    for (const seg of [...segs].sort((a, b) => a.startMs - b.startMs)) {
+      let lane = laneEnds.findIndex((end) => seg.startMs >= end);
+      if (lane === -1) { lane = laneEnds.length; laneEnds.push(0); }
+      laneEnds[lane] = seg.startMs + seg.durationMs;
+      lanes.set(seg, lane);
+    }
+    return lanes;
+  }
+
+  // 某片段在它自己的时间范围内，有没有被后面的片段抢走某条轴
+  function overriddenAxes(trackName, seg) {
+    if (trackName !== "motion") return [];
+    const all = timeline.getTrack("motion");
+    const mine = new Set(axesOfAtom(atomsIndex.byId(seg.atomId)));
+    if (!mine.size) return [];
+    const taken = new Set();
+    for (let i = all.indexOf(seg) + 1; i < all.length; i++) {
+      const other = all[i];
+      const overlaps = other.startMs < seg.startMs + seg.durationMs && seg.startMs < other.startMs + other.durationMs;
+      if (!overlaps) continue;
+      for (const ax of axesOfAtom(atomsIndex.byId(other.atomId))) if (mine.has(ax)) taken.add(ax);
+    }
+    return [...taken];
+  }
+
   // 只切高亮，不重建 DOM（切换通道 tab 时用）
   function highlightActiveTrack() {
     el.tracksEl.querySelectorAll(".track").forEach((t) => {
@@ -377,6 +407,13 @@ export function initUI({ timeline, player, atomsIndex, atomsData, onChange }) {
       if (seg.color) lines.push(`颜色 ${seg.color}  亮度 ${seg.brightness ?? "-"}`);
       const period = seg.periodMs || seg.intervalMs;
       if (period) lines.push(`周期 ${period}ms`);
+    }
+    // 动作轨可重叠：若这条片段的某条轴被同时段靠后的片段抢走，明确提示，避免"设了没生效"
+    const AXIS_CN = { yaw: "旋转", pitch: "俯仰", roll: "歪头" };
+    const lost = overriddenAxes(trackName, seg);
+    if (lost.length) {
+      warn = true;
+      lines.push(`⚠ ${lost.map((a) => AXIS_CN[a] || a).join("/")} 轴被同时段靠后的片段接管，这条在该轴上不生效`);
     }
     return { label, title: lines.join("\n"), warn };
   }
@@ -471,6 +508,12 @@ export function initUI({ timeline, player, atomsIndex, atomsData, onChange }) {
         el.addForm.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
         el.atomSelect.focus();
       });
+      // 动作轨允许重叠 → 把重叠的片段分层摆开（贪心：放进第一条不冲突的层），
+      // 否则它们会叠在一起互相盖住看不清。其余轨道不重叠，永远只有 1 层。
+      const lanes = assignLanes(segs);
+      const laneCount = Math.max(1, ...lanes.values(), 0) + 1;
+      if (laneCount > 1) strip.style.height = 8 + laneCount * 32 + "px";
+
       if (segs.length === 0) {
         const empty = document.createElement("div");
         empty.className = "empty-track";
@@ -485,6 +528,12 @@ export function initUI({ timeline, player, atomsIndex, atomsData, onChange }) {
           block.className = "segment" + (info.warn ? " warn" : "") + (isSel ? " selected" : "");
           block.style.left = (seg.startMs / maxDuration) * 100 + "%";
           block.style.width = Math.max((seg.durationMs / maxDuration) * 100, 3) + "%";
+          if (laneCount > 1) {
+            const lane = lanes.get(seg) || 0;
+            block.style.top = 4 + lane * 32 + "px";
+            block.style.bottom = "auto";
+            block.style.height = "28px";
+          }
           block.title = info.title;
           const text = document.createElement("span");
           text.className = "seg-text";

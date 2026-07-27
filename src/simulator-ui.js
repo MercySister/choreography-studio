@@ -84,7 +84,7 @@ export function initSimulator({ renderer, atomsIndex, motionSim }) {
     const dtMs = firstFrame ? 0 : Math.min(200, now - lastTickTs);
     lastTickTs = now;
     const out = arbiter.tick(dtMs);
-    const pose = motionSim.tick(out.frame.motion, dtMs, { instant: firstFrame });
+    const pose = motionSim.tick(out.frame.motionSegs || out.frame.motion, dtMs, { instant: firstFrame });
     firstFrame = false;
     renderer.render(out.frame, atomsIndex, pose);
     el.current.textContent = out.isIdle ? "待机" : out.sceneName;

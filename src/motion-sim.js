@@ -204,33 +204,55 @@ export class MotionSimulator {
       pitch: new AxisFollower(idle.pitch),
       roll: new AxisFollower(idle.roll),
     };
-    this._activeSegRef = undefined;
+    this._activeSegs = [];
     this._prePose = { ...idle };
     this._plan = {};
   }
 
-  // seg: 当前 motion 轨道的激活片段（或 null）；dtMs: 距上一帧过去的毫秒数；
+  // segs: 当前 motion 轨道上**同时激活**的片段（数组；也兼容传单个片段或 null）。
+  //       三个自由度是各自独立的电机，可以同时动，所以允许多个片段在时间上重叠——
+  //       比如「转到45°保持」和「歪头」叠在一起，就是转过去以后歪着头。
+  // dtMs: 距上一帧过去的毫秒数
   // instant: 为 true 时（拖动进度条/切换示例）直接跳到目标姿态，不做限速插值。
-  tick(seg, dtMs, { instant = false } = {}) {
-    if (seg !== this._activeSegRef) {
+  tick(segs, dtMs, { instant = false } = {}) {
+    const list = Array.isArray(segs) ? segs.filter(Boolean) : segs ? [segs] : [];
+
+    if (!sameSegs(list, this._activeSegs)) {
       this._prePose = {
         yaw: this.followers.yaw.value,
         pitch: this.followers.pitch.value,
         roll: this.followers.roll.value,
       };
-      this._activeSegRef = seg;
-      const atomDef = seg && this.atomsIndex.byId(seg.atomId);
-      const angleOverride = seg && seg.angle != null ? seg.angle : null;
-      this._plan = atomDef ? resolveAtomPlan(atomDef, seg.coefficients || {}, this.atomsData, this._prePose, angleOverride) : {};
+      this._activeSegs = list.slice();
+      // 逐个片段解析成各轴计划再合成：**后面的片段覆盖前面的同名轴**
+      // （轨道顺序靠后 = 后加的 = 优先级高），不同轴的片段则自然并存。
+      this._plan = {};
+      for (const seg of list) {
+        const atomDef = this.atomsIndex.byId(seg.atomId);
+        if (!atomDef) continue;
+        const angleOverride = seg.angle != null ? seg.angle : null;
+        const p = resolveAtomPlan(atomDef, seg.coefficients || {}, this.atomsData, this._prePose, angleOverride);
+        for (const axis of AXES) if (p[axis]) this._plan[axis] = { ...p[axis], owner: seg };
+      }
     }
 
     for (const axis of AXES) {
       const p = this._plan[axis];
       if (p) {
+        // planKey 用"驱动这条轴的那个片段"，这样其它轴的片段增减不会打断本轴正在走的计划。
         // instant 时强制重载 waypoints（force），保证快照读到的是完整计划而不是已消耗的空队列
-        this.followers[axis].drive(seg, p.waypoints, p.speed, instant);
+        this.followers[axis].drive(p.owner, p.waypoints, p.speed, instant);
       } else {
-        this.followers[axis].drive("idle:" + axis, [{ value: this._idle[axis], holdMs: 0 }], fallbackSpeed(this.atomsData, AXIS_DOF[axis]), instant);
+        // 没有任何激活片段驱动这条轴 → **保持当前角度**，不要自动回零。
+        // （早期实现是强制回 idle，导致"转到45°后再歪头"时 yaw 会自己弹回 0；
+        //   要回零请显式排一个「回正/默认位」原子。）
+        const held = this.followers[axis].value;
+        this.followers[axis].drive(
+          `hold:${axis}:${held.toFixed(2)}`,
+          [{ value: held, holdMs: 0 }],
+          fallbackSpeed(this.atomsData, AXIS_DOF[axis]),
+          instant
+        );
       }
       if (instant) this.followers[axis].snapToFirstTarget(this._idle[axis]);
     }
@@ -241,4 +263,36 @@ export class MotionSimulator {
       roll: this.followers.roll.tick(instant ? 0 : dtMs),
     };
   }
+}
+
+function sameSegs(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+// 给 UI 用：一组同时激活的片段里，哪些轴被多个片段抢（后者生效，前者那条轴无效）
+export function findAxisConflicts(segs, atomsIndex) {
+  const owner = {}, conflicts = [];
+  for (const seg of segs || []) {
+    const atom = atomsIndex.byId(seg.atomId);
+    for (const axis of axesOfAtom(atom)) {
+      if (owner[axis]) conflicts.push({ axis, loser: owner[axis], winner: seg });
+      owner[axis] = seg;
+    }
+  }
+  return conflicts;
+}
+
+// 一个动作原子实际会驱动哪几条轴
+export function axesOfAtom(atom) {
+  if (!atom) return [];
+  const out = new Set();
+  for (const dofId of atom.dof || []) {
+    const ax = axisForDof(dofId);
+    if (ax) out.add(ax);
+  }
+  const dp = atom.defaultParams || {};
+  for (const axis of AXES) if (dp[axis] !== undefined) out.add(axis);
+  return [...out];
 }

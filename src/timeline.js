@@ -4,6 +4,10 @@
 
 export const TRACK_NAMES = ["motion", "face", "dress", "vibe", "ambientLight"];
 
+// 允许片段在时间上重叠的轨道。动作轨可以，因为三个自由度是独立电机；
+// 表情/配饰/特效/灯效是互斥表达，同一时刻只能有一个。
+export const OVERLAP_ALLOWED = new Set(["motion"]);
+
 export class Timeline {
   constructor(sequence) {
     this.sequence = normalize(sequence);
@@ -38,13 +42,14 @@ export class Timeline {
     this.sequence.tracks[trackName].splice(index, 1);
   }
 
-  // 同一轨道内片段不允许重叠：按 startMs 排序后从左到右扫描，后一个若与前一个重叠，
-  // 就把它整体后移到"紧贴前一个结束"的位置（自动向后紧贴排布）。已存在的空隙保留。
-  // 加片段、拖动移动、导入后都过一遍这个，保证轨道始终无重叠。
+  // 动作轨允许重叠：Yaw/Pitch/Roll 是三个各自独立的电机，可以同时动
+  // （比如"转到45°保持"和"歪头"叠在同一段时间）。其余轨道是互斥表达
+  // （同一时刻只能有一个表情/一个配饰），仍然强制不重叠。
   packTrack(trackName) {
     const segs = this.sequence.tracks[trackName];
     if (!segs) return;
     segs.sort((a, b) => a.startMs - b.startMs);
+    if (OVERLAP_ALLOWED.has(trackName)) return;   // 只排序，不消重叠
     for (let i = 1; i < segs.length; i++) {
       const prevEnd = segs[i - 1].startMs + segs[i - 1].durationMs;
       if (segs[i].startMs < prevEnd) segs[i].startMs = prevEnd;

@@ -7,7 +7,12 @@ export function frameAt(tracks, t) {
   const frame = {};
   for (const name of TRACK_NAMES) {
     const segs = (tracks && tracks[name]) || [];
-    frame[name] = segs.find((s) => t >= s.startMs && t < s.startMs + s.durationMs) || null;
+    const active = segs.filter((s) => t >= s.startMs && t < s.startMs + s.durationMs);
+    // 动作轨允许片段重叠（三个自由度是独立电机，可以同时动），所以额外给出**全部**
+    // 激活片段；motion-sim 会按轴合成。frame.motion 仍是最后一个（轨道里靠后=优先级高），
+    // 供字幕等只需要"主要动作"的地方使用。
+    if (name === "motion") frame.motionSegs = active;
+    frame[name] = active.length ? active[active.length - 1] : null;
   }
   return frame;
 }

@@ -88,7 +88,7 @@ const player = new Player(timeline, {
       dtMs = lastTickTs == null ? 0 : now - lastTickTs;
       lastTickTs = now;
     }
-    const pose = motionSim.tick(frame.motion, dtMs, { instant });
+    const pose = motionSim.tick(frame.motionSegs || frame.motion, dtMs, { instant });
     renderer.render(frame, atomsIndex, pose);
     ui.updatePlayheads(elapsedMs, maxMs);
   },
@@ -178,6 +178,6 @@ window.__switchModule = switchModule; // 调试/测试钩子
 ui.renderTracks();
 {
   const initialFrame = player.computeFrame(0);
-  const initialPose = motionSim.tick(initialFrame.motion, 0, { instant: true });
+  const initialPose = motionSim.tick(initialFrame.motionSegs || initialFrame.motion, 0, { instant: true });
   renderer.render(initialFrame, atomsIndex, initialPose);
 }
