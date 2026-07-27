@@ -156,6 +156,25 @@ moduleTabs.querySelectorAll(".module-tab").forEach((btn) => {
 });
 window.__switchModule = switchModule; // 调试/测试钩子
 
+// ---- 使用教程弹窗 ----
+// 用原生 <dialog>：遮罩、ESC 关闭、焦点陷阱都是浏览器自带的，不用自己实现。
+{
+  const dlg = document.getElementById("helpDialog");
+  const openBtn = document.getElementById("helpBtn");
+  const closeBtn = document.getElementById("helpCloseBtn");
+  if (dlg && openBtn) {
+    openBtn.addEventListener("click", () => dlg.showModal());
+    closeBtn && closeBtn.addEventListener("click", () => dlg.close());
+    // 点遮罩（dialog 元素本身的空白区，即内容框以外）关闭
+    dlg.addEventListener("click", (e) => {
+      if (e.target !== dlg) return;          // 点到内容区就不关
+      const r = dlg.getBoundingClientRect();
+      const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      if (!inside) dlg.close();
+    });
+  }
+}
+
 ui.renderTracks();
 {
   const initialFrame = player.computeFrame(0);
