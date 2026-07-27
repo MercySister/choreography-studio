@@ -1,0 +1,50 @@
+{
+  "id": "combo_music_pop_001",
+  "name": "音乐律动·流行乐",
+  "version": "0.1.0",
+  "description": "参考产品定义音光派对设计的简化示例：点头节奏+开心表情+话筒配饰+涟漪灯效",
+  "scenePriority": 3,
+  "interruptible": true,
+  "loop": {
+    "enabled": true,
+    "count": -1
+  },
+  "tracks": {
+    "motion": [
+      {
+        "atomId": "ACT_NOD",
+        "startMs": 0,
+        "durationMs": 500,
+        "coefficients": {
+          "rate": 1.5,
+          "amplitude": 1,
+          "repeat": 1,
+          "dwell": 0.5
+        }
+      }
+    ],
+    "face": [
+      {
+        "atomId": "FACE_HAPPY",
+        "startMs": 0,
+        "durationMs": 2000
+      }
+    ],
+    "dress": [
+      {
+        "atomId": "DRESS_MIC",
+        "startMs": 0,
+        "durationMs": 2000
+      }
+    ],
+    "vibe": [],
+    "ambientLight": [
+      {
+        "atomId": "LIGHT_RIPPLE",
+        "startMs": 0,
+        "durationMs": 2000,
+        "color": "#7AC9FF"
+      }
+    ]
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "id": "combo_welcome_001",
+  "name": "迎宾问候",
+  "version": "0.1.0",
+  "description": "参考产品定义迎宾态设计的简化示例：立起+转向+微笑+暖光扫入（自由度：立起=俯仰回正）",
+  "scenePriority": 2,
+  "interruptible": true,
+  "loop": {
+    "enabled": false,
+    "count": 1
+  },
+  "tracks": {
+    "motion": [
+      {
+        "atomId": "ACT_PITCH_HOME",
+        "startMs": 0,
+        "durationMs": 1000,
+        "coefficients": {
+          "rate": 1,
+          "amplitude": 1,
+          "repeat": 1,
+          "dwell": 1
+        }
+      },
+      {
+        "atomId": "ACT_TURN_DRIVER",
+        "startMs": 1000,
+        "durationMs": 1200,
+        "coefficients": {
+          "rate": 1,
+          "amplitude": 1,
+          "repeat": 1,
+          "dwell": 1
+        }
+      }
+    ],
+    "face": [
+      {
+        "atomId": "FACE_EAGER",
+        "startMs": 0,
+        "durationMs": 1000
+      },
+      {
+        "atomId": "FACE_HAPPY",
+        "startMs": 1000,
+        "durationMs": 1400
+      }
+    ],
+    "dress": [
+      {
+        "atomId": "DRESS_HANDSUP",
+        "startMs": 1000,
+        "durationMs": 1400
+      }
+    ],
+    "vibe": [],
+    "ambientLight": [
+      {
+        "atomId": "LIGHT_SWEEP",
+        "startMs": 0,
+        "durationMs": 1200,
+        "color": "#FFCD8C"
+      },
+      {
+        "atomId": "LIGHT_BREATHE",
+        "startMs": 1200,
+        "durationMs": 1200,
+        "color": "#FFDDAA",
+        "brightness": 60
+      }
+    ]
+  }
+}

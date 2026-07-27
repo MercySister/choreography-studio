@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Robot编排模拟平台 MVP</title>
+<link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="brand">
+      <h1>Robot编排模拟平台</h1>
+      <p class="subtitle">Choreography Simulation Studio — MVP</p>
+    </div>
+    <!-- 一级 tab：三个大模块，和标题同排，下划线式标签栏 -->
+    <nav class="module-tabs" id="moduleTabs" role="tablist">
+      <button type="button" class="module-tab active" data-module="scene" role="tab" aria-selected="true">场景编排</button>
+      <button type="button" class="module-tab" data-module="party" role="tab" aria-selected="false">音光派对</button>
+      <button type="button" class="module-tab" data-module="sensing" role="tab" aria-selected="false">感知模拟</button>
+    </nav>
+  </header>
+
+  <main class="layout">
+
+    <section class="preview-col">
+      <div class="stage" id="stage">
+        <!-- 固定底座（Yaw电机在此，本体不动）：圆盘 + 底座housing -->
+        <div class="plinth">
+          <div class="ambient breathe" id="ambient"></div>
+        </div>
+        <div class="dome"></div>
+        <!-- 运动学链：Yaw组(绕底座竖轴转 颈+头) > Pitch组(绕颈根前后摆 颈+头) > 头(绕颈顶歪头) -->
+        <div class="yaw-group" id="yawGroup">
+          <div class="pitch-group" id="pitchGroup">
+            <!-- 颈/头的体积由 robot-shape.js 生成的密集横截面薄片堆出来，
+                 否则转到侧面时平面会退化成一条线 -->
+            <div class="neck" id="neck"></div>
+            <div class="head" id="head">
+              <div class="head-depth" id="headDepth"></div>
+              <div class="screen" id="screen">
+                <div class="screen-vibe" id="screenVibe"></div>
+                <!-- eye-slot 负责情绪的位移/倾斜（眉毛式斜眼），.eye 自身保留果冻呼吸动画，
+                     两者分层避免 transform 互相覆盖 -->
+                <div class="eyes" id="eyes">
+                  <div class="eye-slot" id="eyeSlotL"><div class="eye" id="eyeL"></div></div>
+                  <div class="eye-slot" id="eyeSlotR"><div class="eye" id="eyeR"></div></div>
+                </div>
+                <!-- 情绪辅助符号：腮红/眼泪/汗滴/问号/zzz 等 -->
+                <div class="face-marks" id="faceMarks"></div>
+                <div class="screen-dress" id="screenDress"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="badges" id="badges"></div>
+      <p class="caption" id="caption">待机</p>
+    </section>
+
+    <section class="editor-col">
+      <!-- 一级 tab 在页面顶部的 header 里（和标题同排），这里只放各模块面板 -->
+
+      <!-- ========== 模块一：场景编排 ========== -->
+      <div class="module-panel" data-module="scene">
+
+      <div class="io-row">
+        <select id="exampleSelect" title="载入内置的示例编排">
+          <option value="">载入示例编排…</option>
+          <option value="welcome">迎宾问候</option>
+          <option value="music">音乐律动·流行乐</option>
+        </select>
+        <select id="templateSelect" title="载入已保存的场景模版">
+          <option value="">载入模版…</option>
+        </select>
+        <button class="btn secondary" id="saveTemplateBtn" title="把当前整套编排命名保存为模版">★ 存为模版</button>
+        <button class="btn secondary" id="deleteTemplateBtn" title="删除下拉框里当前选中的模版" style="display:none;">删除模版</button>
+        <span class="io-sep"></span>
+        <button class="btn secondary" id="exportBtn" title="把当前编排导出成 JSON 文件（交付给固件 / 备份 / 分享）">↓ 导出 JSON</button>
+        <label class="btn secondary file-btn" title="从 JSON 文件载入一套编排">
+          ↑ 导入 JSON
+          <input type="file" id="importInput" accept="application/json">
+        </label>
+        <span class="io-note" id="ioNote"></span>
+      </div>
+      <p class="io-hint" id="templateHint"></p>
+
+      <!-- 时间线 + 播放：放在最上面，紧挨左侧常驻的机器人预览，播放时能同时看到动作和进度 -->
+      <div class="card timeline-card">
+        <div class="timeline-head">
+          <!-- 添加片段的开关和播放/停止放在一起，排在播放前面 -->
+          <button type="button" class="btn add-toggle-btn" id="addToggle" aria-expanded="false">＋ 添加片段</button>
+          <span class="head-sep"></span>
+          <button class="btn" id="playBtn" title="从当前位置开始播放">▶ 播放</button>
+          <button class="btn secondary" id="pauseBtn" title="在当前时间点暂停，保持机器人姿态；再点播放从这里继续" disabled>⏸ 暂停</button>
+          <button class="btn secondary" id="stopBtn" title="停止并回到 0ms">■ 停止</button>
+          <span class="time-label" id="timeLabel">0 / 0 ms</span>
+        </div>
+        <!-- 添加面板：紧贴上方「＋ 添加片段」按钮下方展开，默认收起 -->
+        <div class="add-panel collapsed" id="addCard">
+          <div class="add-head">
+            <span class="card-title">添加片段</span>
+            <button type="button" class="mini-btn" id="addCloseBtn">收起</button>
+          </div>
+          <div class="add-body" id="addBody">
+          <div class="track-tabs" id="trackTabs">
+            <button type="button" class="track-tab active" data-track="motion">动作</button>
+            <button type="button" class="track-tab" data-track="face">表情</button>
+            <button type="button" class="track-tab" data-track="dress">配饰</button>
+            <button type="button" class="track-tab" data-track="vibe">氛围特效</button>
+            <button type="button" class="track-tab" data-track="ambientLight">氛围灯</button>
+          </div>
+
+          <div class="add-form">
+            <div class="form-row">
+              <label>原子</label>
+              <select id="atomSelect"></select>
+            </div>
+            <div class="form-row">
+              <label>开始(ms)</label>
+              <input type="number" id="startMsInput" value="0" min="0" step="100">
+              <label>时长(ms)</label>
+              <input type="number" id="durationMsInput" value="1000" min="100" step="100">
+              <span class="io-note" id="startHint"></span>
+            </div>
+            <div class="form-row coeff-row" id="angleRow">
+              <label>角度(°)</label><input type="number" id="angleInput" step="1" placeholder="默认" title="动作转到的目标角度；留空用原子默认。选原子时自动填入默认角度">
+              <span class="io-note" id="angleHint"></span>
+            </div>
+            <div class="form-row coeff-row" id="coeffRow">
+              <label>速率</label><input type="number" id="coefRate" value="1.0" step="0.1" min="0.1">
+              <label>幅度</label><input type="number" id="coefAmp" value="1.0" step="0.1" min="0.1">
+              <label>重复</label><input type="number" id="coefRepeat" value="1" step="1" min="1">
+              <label>停留</label><input type="number" id="coefDwell" value="1.0" step="0.1" min="0.1">
+            </div>
+            <div class="final-angle" id="finalAngleHint"></div>
+            <div class="final-angle dur-hint" id="durationHint"></div>
+            <div class="form-row" id="lightRow" style="display:none;">
+              <label>颜色</label><input type="color" id="lightColor" value="#ffcf8a">
+              <label>亮度</label><input type="number" id="lightBrightness" value="60" min="0" max="100">
+              <label>周期(ms)</label><input type="number" id="lightPeriod" placeholder="默认" min="100" step="100">
+            </div>
+            <div class="form-actions">
+              <button class="btn" id="addSegmentBtn">+ 加入「动作」轨道</button>
+              <button class="btn secondary" id="cancelEditBtn" style="display:none;">取消编辑</button>
+              <span class="io-note" id="editNote"></span>
+            </div>
+          </div>
+          </div><!-- /add-body -->
+        </div>
+        <input type="range" id="scrubber" class="timeline-scrubber" min="0" max="1000" value="0" step="1" title="拖动查看/定位播放进度">
+        <div class="tracks" id="tracks"></div>
+        <p class="tracks-hint">上方 <b>＋ 添加片段</b> 新增，或<b>点轨道空白处</b>直接在那个时间新增 ·<b>点片段</b>精细编辑·<b>左右拖动</b>改时间·<b>向下拖出</b>或 <b>×</b> 删除。同轨道不重叠，重叠自动向后紧贴。</p>
+      </div>
+
+      </div><!-- /module-panel scene -->
+
+      <!-- ========== 模块二：音光派对 ========== -->
+      <div class="module-panel" data-module="party" hidden>
+      <div class="card">
+        <p class="card-title">音乐律动 · 实时解析（音光派对基础模式）</p>
+        <div class="form-row">
+          <label>音源</label>
+          <select id="sourceSelect">
+            <option value="file">本地音频文件</option>
+            <option value="mic">麦克风（听电脑外放/环境音乐）</option>
+            <option value="tab">浏览器标签页音频（网页播放器）</option>
+          </select>
+          <label class="btn secondary file-btn" id="musicFileLabel">
+            选择音频
+            <input type="file" id="musicFile" accept="audio/*">
+          </label>
+        </div>
+        <div class="form-row">
+          <button class="btn" id="musicPlayBtn" disabled>♪ 开始律动</button>
+          <button class="btn secondary" id="musicStopBtn" disabled>停止</button>
+          <label>曲风</label>
+          <select id="genreSelect">
+            <option value="">自动（按BPM推测）</option>
+          </select>
+        </div>
+        <div class="beat-axes">
+          <div class="beat-axis-head"><span>律动自由度</span><span>频次</span><span>幅度</span></div>
+          <div class="beat-axis-row">
+            <label class="chk"><input type="checkbox" id="axisPitch" checked> 俯仰点头</label>
+            <select id="pitchDiv" class="beat-div">
+              <option value="1">每拍</option><option value="2" selected>每2拍</option><option value="4">每4拍</option>
+            </select>
+            <input type="number" id="pitchAmp" class="beat-amp" value="18" min="4" max="30" step="2">
+          </div>
+          <div class="beat-axis-row">
+            <label class="chk"><input type="checkbox" id="axisRoll" checked> 歪头摇摆</label>
+            <select id="rollDiv" class="beat-div">
+              <option value="1">每拍</option><option value="2" selected>每2拍</option><option value="4">每4拍</option>
+            </select>
+            <input type="number" id="rollAmp" class="beat-amp" value="16" min="4" max="20" step="2">
+          </div>
+          <div class="beat-axis-row">
+            <label class="chk"><input type="checkbox" id="axisYaw"> 旋转摆头</label>
+            <select id="yawDiv" class="beat-div">
+              <option value="1">每拍</option><option value="2">每2拍</option><option value="4" selected>每4拍</option>
+            </select>
+            <input type="number" id="yawAmp" class="beat-amp" value="30" min="4" max="50" step="2">
+          </div>
+        </div>
+        <div class="music-meters">
+          <div class="meter-row"><span class="meter-label">节奏 0-100Hz</span><div class="meter"><i id="meterRhythm"></i></div></div>
+          <div class="meter-row"><span class="meter-label">律动 100-500Hz</span><div class="meter"><i id="meterGroove"></i></div></div>
+          <div class="meter-row"><span class="meter-label">情绪 0.5-3kHz</span><div class="meter"><i id="meterEmotion"></i></div></div>
+          <div class="meter-row"><span class="meter-label">亮点 3-20kHz</span><div class="meter"><i id="meterHighlight"></i></div></div>
+        </div>
+        <p class="io-note" id="musicStatus">选择本地音频文件后点"开始律动"。算法对应产品定义音光派对基础模式：12频段→4通道层，节拍→点头，中低频→摆头，曲风→表情/配饰，高频镲→拍手/击掌。真车上频谱来自CDC(ID_MUSIC_FRQ)，这里用Web Audio对本地文件做同样的解析。</p>
+      </div>
+      </div><!-- /module-panel party -->
+
+      <!-- ========== 模块三：感知模拟 ========== -->
+      <div class="module-panel" data-module="sensing" hidden>
+      <div class="card">
+        <p class="card-title">感知模拟 · 硬件能力 <span class="tag-proposed">提案</span></p>
+        <div class="form-row">
+          <button class="btn" id="simToggleBtn">▷ 进入模拟</button>
+          <span class="io-note" id="simState">未运行</span>
+        </div>
+        <div id="sensorPanel"></div>
+        <div class="sim-current">当前行为：<b id="simCurrent">—</b></div>
+        <div class="sim-log" id="simLog"></div>
+        <p class="io-note">进入模拟后，触发各传感器事件 → 决策器按 scenePriority 仲裁优先级、按 interruptible 判断能否打断 → 机器人做出对应场景反应，对应真车上"感知事件→场景反应"的行为闭环。NFC/触摸/手势/人脸交互在产品定义里尚未定义，此为提案。</p>
+      </div>
+      </div><!-- /module-panel sensing -->
+    </section>
+
+  </main>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
